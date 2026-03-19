@@ -1,0 +1,46 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
+
+WorldInfo {
+}
+Viewpoint {
+  orientation 0.14832549792028318 0.22714525027465263 -0.9624991334772025 1.1922000002631292
+  position -0.7262695747533336 1.930082648202498 0.8241728002164512
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  rotation 0 0 -1 1.047195307179586
+}
+Solid {
+  translation 0 0 0.223425
+  children [
+    Shape {
+      geometry Sphere {
+        radius 0.1
+      }
+    }
+  ]
+  boundingObject Sphere {
+    radius 0.1
+  }
+  physics Physics {
+  }
+}
+Robot {
+  translation -0.401056 -0.0759116 0.14
+  rotation 0 0 1 -0.261795307179586
+  children [
+    Camera {
+      translation 0.0332938 0.18 0.0869336
+      rotation 0 1 0 0.261799
+      name "mycamera"
+    }
+  ]
+  controller "<extern>"
+}

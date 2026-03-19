@@ -1,0 +1,58 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/robotis/turtlebot/protos/TurtleBot3Burger.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/devices/robotis/protos/RobotisLds01.proto"
+
+WorldInfo {
+}
+Viewpoint {
+  orientation -0.3725058834509644 0.31206439218012855 0.8739880902664883 1.8776061803756936
+  position 1.6898656559058227 -4.6281176756276885 5.3459598945427835
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  floorSize 3 3
+  wallHeight 0.3
+}
+WoodenBox {
+  translation 0.5 0.25 0.04
+  size 0.01 2.5 0.3
+}
+WoodenBox {
+  translation -0.5 0.24 0.04
+  name "wooden box(4)"
+  size 0.01 2.5 0.3
+}
+WoodenBox {
+  translation 1 -0.25 0.04
+  name "wooden box(1)"
+  size 0.01 2.5 0.3
+}
+WoodenBox {
+  translation -1.01 -0.25 0.04
+  name "wooden box(3)"
+  size 0.01 2.5 0.3
+}
+WoodenBox {
+  translation 0 -0.26 0.04
+  name "wooden box(2)"
+  size 0.01 2.5 0.3
+}
+TurtleBot3Burger {
+  translation 1.23 -1.28 0.0104629
+  rotation -0.0023133391333194017 0.0023232991295879402 0.999994625357161 1.5708
+  controller "<extern>"
+  supervisor TRUE
+  extensionSlot [
+    RobotisLds01 {
+      noise 0
+    }
+  ]
+}

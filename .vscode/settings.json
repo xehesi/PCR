@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cmd /c findstr /n \"\\^\" \"c:\\\\Users\\\\defin\\\\OneDrive\\\\Documents\\\\percept robot\\\\PCR\\\\blob_detection\\.py\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
