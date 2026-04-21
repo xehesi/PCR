@@ -21,7 +21,7 @@ def _normalize_angle(a):
 
 
 def _relative_pose(pose_i, pose_j):
-    """Return the pose of j expressed in the frame of i."""
+    #Return the pose of j expressed in the frame of i
     dx = pose_j[0] - pose_i[0]
     dy = pose_j[1] - pose_i[1]
     ci = math.cos(pose_i[2])
@@ -33,7 +33,7 @@ def _relative_pose(pose_i, pose_j):
 
 
 def _scan_descriptor(scan, num_bins=36):
-    """Encode a lidar scan as a mean-range histogram over angular bins."""
+    #Encode a lidar scan as a mean-range histogram over angular bins.
     bins   = np.zeros(num_bins)
     counts = np.zeros(num_bins)
     for (lx, ly) in scan:
@@ -46,7 +46,7 @@ def _scan_descriptor(scan, num_bins=36):
 
 
 def _scan_similarity(d1, d2):
-    """Cosine similarity between two scan descriptors."""
+    #Cosine similarity between two scan descriptors.
     n1 = np.linalg.norm(d1)
     n2 = np.linalg.norm(d2)
     if n1 == 0 or n2 == 0:
@@ -55,7 +55,7 @@ def _scan_similarity(d1, d2):
 
 
 def _subsample_scan(pts, max_pts):
-    """Uniformly subsample a scan to at most max_pts points."""
+    #Uniformly subsample a scan to at most max_pts points.
     if len(pts) <= max_pts:
         return pts
     idx = np.round(np.linspace(0, len(pts) - 1, max_pts)).astype(int)
@@ -63,10 +63,7 @@ def _subsample_scan(pts, max_pts):
 
 
 def _icp_2d(src_pts, dst_pts, max_iter=15, tol=1e-4, max_match_dist=0.8):
-    """
-    Minimal 2-D ICP.  Returns (dx, dy, dtheta) that aligns src onto dst,
-    or None if matching fails.  Inputs are subsampled before use.
-    """
+    #Minimal 2-D ICP.  Returns (dx, dy, dtheta) that aligns src onto dst, or None if matching fails. Inputs are subsampled before use.
     src_pts = _subsample_scan(src_pts, _MAX_ICP_POINTS)
     dst_pts = _subsample_scan(dst_pts, _MAX_ICP_POINTS)
 
@@ -125,7 +122,7 @@ def _icp_2d(src_pts, dst_pts, max_iter=15, tol=1e-4, max_match_dist=0.8):
 # ── Extended Kalman Filter (single-pose, for odometry smoothing) ─────────────
 
 class _EKF:
-    """Predict-only EKF that smooths wheel-odometry noise before adding nodes."""
+    #Predict-only EKF that smooths wheel-odometry noise before adding nodes.
 
     def __init__(self, x, y, theta):
         self.state = np.array([x, y, theta], dtype=float)
@@ -152,17 +149,7 @@ class _EKF:
         return self.state.copy()
 
 
-# ── Full GraphSLAM tracker ───────────────────────────────────────────────────
-
 class FullGraphSLAMTracker:
-    """
-    GraphSLAM with:
-      - EKF odometry smoothing
-      - Scan-descriptor-based loop closure detection
-      - ICP scan matching for loop closure measurement
-      - Levenberg-Marquardt graph optimization (scipy)
-    """
-
     def __init__(self, start_x=0.0, start_y=0.0, start_theta=0.0):
         self.nodes             = [np.array([start_x, start_y, start_theta], dtype=float)]
         self.scans             = [[]]
@@ -214,7 +201,6 @@ class FullGraphSLAMTracker:
 
         return self.nodes[node_idx]
 
-    # ── Loop closure ─────────────────────────────────────────────────────────
 
     def _check_loop_closure(self, current_idx, current_scan):
         if current_idx < LOOP_CLOSURE_MIN_NODE_GAP + 1:
@@ -256,7 +242,6 @@ class FullGraphSLAMTracker:
             self.loop_closure_edges.append((i, current_idx))
             print(f"[GraphSLAM] Loop closure: node {i} <-> node {current_idx}  (sim={sim:.2f})")
 
-    # ── Graph optimization (Levenberg-Marquardt via scipy) ───────────────────
 
     def _optimize_graph(self):
         n = len(self.nodes)
@@ -295,10 +280,9 @@ class FullGraphSLAMTracker:
 # ── Visualisation ────────────────────────────────────────────────────────────
 
 def draw_graph_map(tracker, background_img=None, map_size=700, scale=100, center_mode="origin"):
-    """
-    Redraw the full map from scratch each frame so optimized poses stay correct.
-    Returns (background_img, display_img) to match the SLAM.py interface.
-    """
+
+    #Redraw the full map from scratch each frame so optimized poses stay correct. Returns (background_img, display_img) to match the SLAM.py interface.
+
     background_img = np.zeros((map_size, map_size, 3), dtype=np.uint8)
     center_x, center_y = map_size // 2, map_size // 2
     anchor_x, anchor_y = 0.0, 0.0
