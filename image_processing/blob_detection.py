@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 def get_quantized_index(pixel_rgb):
     r, g, b = pixel_rgb
@@ -21,7 +22,9 @@ def detect_blob(
     gradient_x=None,
     gradient_y=None,
     min_blob_size=10,
+    max_blob_size=None,
     edge_threshold=75,
+    motion_mask=None,
 ):
     height, width = frame.shape[:2]
     
@@ -33,53 +36,77 @@ def detect_blob(
     width = min(width, edges_width)
 
     edge_mask = edge_magnitude[:height, :width] > edge_threshold
+
+    # When a motion_mask is provided, only seed blobs from pixels that have
+    # changed between frames.  The flood fill is still allowed to grow into
+    # static neighbours (so the full blob shape is recovered), but we never
+    # *start* a new blob on a pixel that hasn't moved.
+    has_motion_mask = motion_mask is not None
+
+    # Pre-compute quantized colour bins for the whole image at once (avoids
+    # calling get_quantized_bin per-pixel inside the flood-fill loop).
+    quantized = (frame[:height, :width] // 32).astype(np.int32)
     
     visited = np.zeros((height, width), dtype=bool)
+    has_gradients = gradient_x is not None and gradient_y is not None
     all_blobs = []
 
     for y in range(height):
         for x in range(width):
-            if not visited[y, x] and not edge_mask[y, x]:
-                target_bin = get_quantized_bin(frame[y, x])
-                new_blob_pixels = []
-                gradient_histogram = np.zeros(8, dtype=int)
-                stack = [(x, y)]
-                visited[y, x] = True
-                
-                while stack:
-                    curr_x, curr_y = stack.pop()
-                    new_blob_pixels.append((curr_x, curr_y))
+            if visited[y, x] or edge_mask[y, x]:
+                continue
+            # Only start a blob on a pixel that is inside the motion region
+            if has_motion_mask and not motion_mask[y, x]:
+                continue
 
-                    if gradient_x is not None and gradient_y is not None:
-                        gx = gradient_x[curr_y, curr_x]
-                        gy = gradient_y[curr_y, curr_x]
-                        if gx != 0 or gy != 0:
-                            angle = np.arctan2(gy, gx) * 180 / np.pi
-                            if angle < 0:
-                                angle += 360
-                            add_to_gradient_histogram(gradient_histogram, angle)
-                    
-                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                        neighbor_x, neighbor_y = curr_x + dx, curr_y + dy
-                        if 0 <= neighbor_x < width and 0 <= neighbor_y < height:
-                            if not visited[neighbor_y, neighbor_x] and not edge_mask[neighbor_y, neighbor_x]:
-                                if get_quantized_bin(frame[neighbor_y, neighbor_x]) == target_bin:
-                                    visited[neighbor_y, neighbor_x] = True
-                                    stack.append((neighbor_x, neighbor_y))
+            target_r = quantized[y, x, 0]
+            target_g = quantized[y, x, 1]
+            target_b = quantized[y, x, 2]
+            new_blob_pixels = []
+            gradient_histogram = np.zeros(8, dtype=int)
+            stack = [(x, y)]
+            visited[y, x] = True
+            
+            while stack:
+                curr_x, curr_y = stack.pop()
+                new_blob_pixels.append((curr_x, curr_y))
+
+                if has_gradients:
+                    gx = gradient_x[curr_y, curr_x]
+                    gy = gradient_y[curr_y, curr_x]
+                    if gx != 0 or gy != 0:
+                        angle = math.atan2(gy, gx) * 57.29577951308232  # 180/pi
+                        if angle < 0:
+                            angle += 360.0
+                        add_to_gradient_histogram(gradient_histogram, angle)
                 
-                if len(new_blob_pixels) >= min_blob_size:
-                    pixels_array = np.array(new_blob_pixels)
-                    
-                    center_x = np.mean(pixels_array[:, 0])
-                    center_y = np.mean(pixels_array[:, 1])
-                    
-                    all_blobs.append({
-                        'pixels': pixels_array,
-                        'color_bin': np.array(target_bin),
-                        'gradient_histogram': gradient_histogram,
-                        'center': (center_x, center_y),
-                        'size': len(new_blob_pixels)
-                    })
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    neighbor_x, neighbor_y = curr_x + dx, curr_y + dy
+                    if 0 <= neighbor_x < width and 0 <= neighbor_y < height:
+                        if not visited[neighbor_y, neighbor_x] and not edge_mask[neighbor_y, neighbor_x]:
+                            q = quantized[neighbor_y, neighbor_x]
+                            if q[0] == target_r and q[1] == target_g and q[2] == target_b:
+                                visited[neighbor_y, neighbor_x] = True
+                                stack.append((neighbor_x, neighbor_y))
+            
+            blob_size = len(new_blob_pixels)
+            if blob_size < min_blob_size:
+                continue
+            if max_blob_size is not None and blob_size > max_blob_size:
+                continue
+
+            pixels_array = np.array(new_blob_pixels)
+            
+            center_x = np.mean(pixels_array[:, 0])
+            center_y = np.mean(pixels_array[:, 1])
+            
+            all_blobs.append({
+                'pixels': pixels_array,
+                'color_bin': np.array([target_r, target_g, target_b]),
+                'gradient_histogram': gradient_histogram,
+                'center': (center_x, center_y),
+                'size': blob_size
+            })
                     
     return all_blobs
 
