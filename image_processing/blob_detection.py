@@ -155,14 +155,64 @@ def find_ball_blob(all_blobs, width, height):
     best_blob = None
     img_center_x, img_center_y = width / 2, height / 2
     min_dist = float('inf')
-    
+
     for blob in all_blobs:
         if 50 < blob['size'] < (width * height * 0.4):
             blob_c_x, blob_c_y = blob['center']
             dist = (blob_c_x - img_center_x)**2 + (blob_c_y - img_center_y)**2
-            
+
             if dist < min_dist:
                 min_dist = dist
                 best_blob = blob
-                
+
     return best_blob
+
+
+# ── Motion detection helpers (Phase 4 sensor fusion) ────────────────────────
+
+
+def compute_motion_mask(prev_gray, curr_gray, threshold=20):
+    """
+    Frame-difference motion detector — written from scratch, no cv2.
+    Returns a boolean (H, W) array: True where pixel intensity changed by
+    more than `threshold` between the two grayscale frames.
+    """
+    diff = np.abs(curr_gray.astype(np.int32) - prev_gray.astype(np.int32))
+    return diff > threshold
+
+
+def get_dynamic_lidar_indices(motion_mask, cam_fov_rad, lidar_angles_rad, cam_width):
+    """
+    Map camera-column motion to LiDAR ray indices.
+
+    Convention (matching webot_graphSLAM.py):
+      - Column 0          → left edge  → angle = +cam_fov/2
+      - Column cam_width-1 → right edge → angle = -cam_fov/2
+      - LiDAR angle 0     → straight ahead (positive = left)
+
+    Returns a boolean array of length len(lidar_angles_rad):
+      True  → this ray points toward a region where the camera saw motion
+              → exclude from the static map
+      False → stationary obstacle; include normally
+    """
+    if not np.any(motion_mask):
+        return np.zeros(len(lidar_angles_rad), dtype=bool)
+
+    # Columns that contain at least one moving pixel
+    dynamic_cols = np.where(motion_mask.any(axis=0))[0]
+    if len(dynamic_cols) == 0:
+        return np.zeros(len(lidar_angles_rad), dtype=bool)
+
+    # Column index → horizontal angle (radians, left = positive)
+    denom = max(cam_width - 1, 1)
+    col_angles = cam_fov_rad / 2.0 - dynamic_cols * (cam_fov_rad / denom)
+
+    # Half the angular width of one camera pixel — used as match tolerance
+    half_pixel = cam_fov_rad / (2.0 * denom)
+
+    lidar_arr = np.asarray(lidar_angles_rad, dtype=float)
+
+    # Vectorised: (L, D) distance matrix; mark lidar ray dynamic if its angle
+    # falls within half a pixel of any dynamic camera column
+    diffs = np.abs(lidar_arr[:, None] - col_angles[None, :])  # (L, D)
+    return diffs.min(axis=1) <= half_pixel

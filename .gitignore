@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+slam_controller.py
+worlds/slam_world.wbt
+.claude
