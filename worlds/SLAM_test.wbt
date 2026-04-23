@@ -10,8 +10,8 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.3725058834509644 0.31206439218012855 0.8739880902664883 1.8776061803756936
-  position 1.6898656559058227 -4.6281176756276885 5.3459598945427835
+  orientation -0.5820367441083963 0.2864392574355283 0.761042561429701 2.4248736446359276
+  position 0.7728764843473148 -2.3311466328741792 7.583276062352974
 }
 TexturedBackground {
 }
@@ -22,31 +22,23 @@ RectangleArena {
   wallHeight 0.3
 }
 WoodenBox {
-  translation 0.5 0.25 0.04
-  size 0.01 2.5 0.3
-}
-WoodenBox {
-  translation -0.5 0.24 0.04
+  translation -0.818194 0.841035 0.04
+  rotation 0 0 1 2.35619
   name "wooden box(4)"
-  size 0.01 2.5 0.3
+  size 0.01 1 0.3
 }
 WoodenBox {
-  translation 1 -0.25 0.04
+  translation 1 0 0.04
   name "wooden box(1)"
-  size 0.01 2.5 0.3
+  size 0.01 2 0.3
 }
 WoodenBox {
-  translation -1.01 -0.25 0.04
+  translation -0.53 -0.25 0.04
   name "wooden box(3)"
-  size 0.01 2.5 0.3
-}
-WoodenBox {
-  translation 0 -0.26 0.04
-  name "wooden box(2)"
-  size 0.01 2.5 0.3
+  size 0.01 1.5 0.3
 }
 TurtleBot3Burger {
-  translation 1.23 -1.28 0.0104629
+  translation 0.31 -1.28 0.0104721
   rotation -0.0023133391333194017 0.0023232991295879402 0.999994625357161 1.5708
   controller "<extern>"
   supervisor TRUE
