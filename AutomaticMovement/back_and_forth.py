@@ -1,6 +1,6 @@
 """
 back_and_forth.py — Pioneer 3-AT controller that drives forward and backward
-every 5 seconds in a continuous loop.
+every 2 seconds in a continuous loop.
 """
 
 from dotenv import load_dotenv
@@ -17,8 +17,8 @@ sys.path.append(os.path.join(webots_home, "lib", "controller", "python"))
 from controller import Robot  # type: ignore
 
 MAX_SPEED = 6.28
-DRIVE_SPEED = MAX_SPEED * 0.35
-TOGGLE_INTERVAL = 5.0  # seconds before switching direction
+DRIVE_SPEED = MAX_SPEED * 0.75
+TOGGLE_INTERVAL = 0.75  # seconds before switching direction
 
 os.environ["WEBOTS_CONTROLLER_URL"] = "Pioneer 3-AT"
 def auto():

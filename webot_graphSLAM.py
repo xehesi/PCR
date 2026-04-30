@@ -1,16 +1,7 @@
-"""Full GraphSLAM controller — logic adapted from tawan-slam/slam.py.
-
-Sensors, motors, and (optional) automatic movement are wired inline here;
-this matches the existing PCR style rather than introducing a devices module.
-The SLAM math lives in ``mapping.graphSLAM`` (ported from tawan-slam/
-mapping/graph_omg.py) and uses ``mapping.icp.icp_match`` for loop closure.
-"""
-
 from dotenv import load_dotenv
 load_dotenv()
 
 from mapping.graphSLAM import GraphSession, draw_graph_map
-from image_processing.blob_detection import compute_motion_mask, get_dynamic_lidar_indices
 
 import os, sys, cv2
 import math
@@ -32,11 +23,8 @@ ROTATION_SIGN = 0.89
 
 # ── Manual control ───────────────────────────────────────────────────────────
 MAX_SPEED     = 6.28
-FORWARD_SPEED = MAX_SPEED * 0.55
-TURN_SPEED    = MAX_SPEED * 0.35
-
-# Webots TurtleBot3 camera is 60° wide; getFov() returns this at runtime.
-CAMERA_DEVICE_NAME = "mycamera"
+FORWARD_SPEED = MAX_SPEED * 0.85
+TURN_SPEED    = MAX_SPEED * 0.55
 
 # ── Sensor noise model (NOISE_ENABLED=False for ideal-sensor baseline) ──────
 NOISE_ENABLED              = True
@@ -53,14 +41,6 @@ os.environ["WEBOTS_CONTROLLER_URL"] = "TurtleBot3Burger"
 
 # ── Small helpers ────────────────────────────────────────────────────────────
 
-def _to_gray(bgra_arr):
-    """BGRA uint8 → greyscale uint8 via integer luminosity weights."""
-    b = bgra_arr[:, :, 0].astype(np.uint32)
-    g = bgra_arr[:, :, 1].astype(np.uint32)
-    r = bgra_arr[:, :, 2].astype(np.uint32)
-    return ((r * 306 + g * 601 + b * 117) >> 10).astype(np.uint8)
-
-
 def _build_lidar_angles(ray_count, lidar_fov):
     """Angle (rad, left = positive) for each lidar ray index — Webots sweep order."""
     if ray_count <= 0:
@@ -72,6 +52,86 @@ def _build_lidar_angles(ray_count, lidar_fov):
         ],
         dtype=float,
     )
+
+
+# ── LiDAR-based dynamic ray filter (360°) ───────────────────────────────────
+LIDAR_DYNAMIC_CHANGE_THRESHOLD = 0.15   # metres — must exceed expected ego-residual + sensor noise
+
+def _lidar_dynamic_mask(
+    prev_ranges,
+    prev_pose,
+    curr_ranges,
+    curr_pose,
+    lidar_angles,
+    max_range,
+    change_threshold=LIDAR_DYNAMIC_CHANGE_THRESHOLD,
+):
+    """Per-ray change detector that compensates for ego-motion.
+
+    Projects the previous scan's body-frame points into the current body
+    frame using the IMU-yaw + odometry delta, re-bins them by current ray
+    index, and flags rays whose actual range differs from the predicted
+    range by more than ``change_threshold``.
+
+    Returns a boolean array of length ``len(curr_ranges)`` (True = dynamic).
+    Falls back to all-False on the first tick or when ray-counts disagree.
+    """
+    n = len(curr_ranges)
+    if prev_ranges is None or len(prev_ranges) != n or prev_pose is None:
+        return np.zeros(n, dtype=bool)
+
+    prev_r = np.asarray(prev_ranges, dtype=float)
+    curr_r = np.asarray(curr_ranges, dtype=float)
+    angles = np.asarray(lidar_angles, dtype=float)
+
+    prev_valid = np.isfinite(prev_r) & (prev_r > 0.0) & (prev_r < max_range)
+    if not prev_valid.any():
+        return np.zeros(n, dtype=bool)
+
+    # Body-frame xy of previous returns.
+    px = prev_r * np.cos(angles)
+    py = prev_r * np.sin(angles)
+
+    # Transform prev body frame → current body frame.
+    # rotation by (prev_theta - curr_theta), translation = prev origin
+    # expressed in current body frame.
+    dtheta = prev_pose[2] - curr_pose[2]
+    c_d, s_d = math.cos(dtheta), math.sin(dtheta)
+    dx_w = prev_pose[0] - curr_pose[0]
+    dy_w = prev_pose[1] - curr_pose[1]
+    c_c, s_c = math.cos(curr_pose[2]), math.sin(curr_pose[2])
+    tx =  c_c * dx_w + s_c * dy_w
+    ty = -s_c * dx_w + c_c * dy_w
+    qx = c_d * px - s_d * py + tx
+    qy = s_d * px + c_d * py + ty
+
+    pred_range = np.hypot(qx, qy)
+    pred_angle = np.arctan2(qy, qx)
+
+    # Map predicted angles back to ray indices. Webots sweeps high → low,
+    # so step is negative; handle either ordering generically.
+    if n > 1:
+        step = angles[1] - angles[0]
+        if step == 0.0:
+            return np.zeros(n, dtype=bool)
+        idx_f = (pred_angle - angles[0]) / step
+    else:
+        idx_f = np.zeros_like(pred_angle)
+    idx = np.round(idx_f).astype(int)
+    in_range = (idx >= 0) & (idx < n) & prev_valid
+
+    # Reduce: keep nearest predicted return per current ray bin.
+    predicted = np.full(n, np.inf, dtype=float)
+    for i in np.where(in_range)[0]:
+        j = int(idx[i])
+        if pred_range[i] < predicted[j]:
+            predicted[j] = pred_range[i]
+
+    curr_valid = np.isfinite(curr_r) & (curr_r > 0.0) & (curr_r < max_range)
+    pred_valid = np.isfinite(predicted)
+    both_valid = curr_valid & pred_valid
+    diff = np.abs(curr_r - predicted)
+    return both_valid & (diff > change_threshold)
 
 
 def run_robot():
@@ -108,16 +168,6 @@ def run_robot():
     imu = robot.getDevice("inertial unit")
     imu.enable(timestep)
 
-    # ── Camera (optional — graceful fallback if absent) ───────────────────
-    camera     = robot.getDevice(CAMERA_DEVICE_NAME)
-    has_camera = camera is not None
-    if has_camera:
-        camera.enable(timestep)
-        cam_width  = camera.getWidth()
-        cam_height = camera.getHeight()
-        cam_fov    = camera.getFov()
-    prev_gray = None
-
     # ── Noise RNG + IMU helper ────────────────────────────────────────────
     rng = np.random.default_rng(NOISE_SEED)
 
@@ -146,6 +196,10 @@ def run_robot():
     odom_x = 0.0
     odom_y = 0.0
     odom_theta = _get_imu_yaw()
+
+    # ── Previous-tick state for the LiDAR-based dynamic-ray filter ──────
+    prev_lidar_ranges = None
+    prev_lidar_pose   = None
 
     # ── Pose-graph session (tawan-slam logic) ─────────────────────────────
     session = GraphSession(
@@ -222,31 +276,20 @@ def run_robot():
             ranges_count = len(ranges)
             lidar_angles = _build_lidar_angles(ranges_count, lidar_fov)
 
-        # ── Camera motion mask → dynamic-ray filter ──────────────────────
+        # ── LiDAR-based 360° dynamic detection ───────────────────────────
         # Dynamic rays are set to inf so mapping.graphSLAM.scan_to_points
         # drops them (invalid) — moving objects never enter the SLAM map.
-        if has_camera:
-            raw = camera.getImage()
-            if raw:
-                bgra = np.frombuffer(raw, dtype=np.uint8).reshape(
-                    (cam_height, cam_width, 4)
-                )
-                curr_gray = _to_gray(bgra)
-                if prev_gray is not None:
-                    motion_mask  = compute_motion_mask(prev_gray, curr_gray, threshold=20)
-                    dynamic_mask = get_dynamic_lidar_indices(
-                        motion_mask, cam_fov, lidar_angles, cam_width
-                    )
-                else:
-                    dynamic_mask = np.zeros(ranges_count, dtype=bool)
-                prev_gray = curr_gray
-            else:
-                dynamic_mask = np.zeros(ranges_count, dtype=bool)
-        else:
-            dynamic_mask = np.zeros(ranges_count, dtype=bool)
+        lidar_dyn_mask = _lidar_dynamic_mask(
+            prev_lidar_ranges, prev_lidar_pose,
+            ranges, pose_vec,
+            lidar_angles, lidar_max_range,
+        )
+        # Cache the *raw* (unfiltered) scan + pose for next tick's predictor.
+        prev_lidar_ranges = list(ranges)
+        prev_lidar_pose   = pose_vec.copy()
 
         scan_array = np.asarray(ranges, dtype=float).copy()
-        scan_array[dynamic_mask] = float('inf')
+        scan_array[lidar_dyn_mask] = float('inf')
 
         # ── GraphSLAM update ─────────────────────────────────────────────
         optimized = session.step(pose_vec, scan_array)
@@ -295,9 +338,6 @@ def run_robot():
                     (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
         cv2.putText(live_map, f"Loop closures: {num_lc}",
                     (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 0), 1)
-        if has_camera:
-            cv2.putText(live_map, "Sensor fusion: ON",
-                        (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 200, 0), 1)
 
         cv2.imshow("Full GraphSLAM Map", live_map)
 

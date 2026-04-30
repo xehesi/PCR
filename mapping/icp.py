@@ -1,11 +1,3 @@
-"""Lu & Milios style 2-D ICP.
-
-Ported from https://github.com/richardos/icp but without sklearn:
-nearest-neighbour search is a vectorised numpy argmin. Exposes ``icp_match``
-which wraps ``icp`` with an initial-guess warm start and a Kabsch recovery of
-the full (init + refinement) SE(2) transform plus a mean residual.
-"""
-
 from __future__ import annotations
 
 import math

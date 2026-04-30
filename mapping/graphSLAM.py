@@ -1,21 +1,3 @@
-"""Pose-graph SLAM ported from tawan-slam/mapping/graph_omg.py.
-
-Structure and algorithm follow the reference implementation:
-    - Node / Edge primitives.
-    - GraphSLAM: Gauss-Newton optimiser (numerical Jacobians, scalar weights).
-      Node 0 is anchored with a large weight rather than being removed from the
-      state — matches the reference behaviour.
-    - GraphSession: online driver that adds a keyframe whenever the robot has
-      moved / rotated past a threshold, builds odometry edges, and attempts two
-      loop-closure strategies per tick:
-        1. Proximity to node 0 (once past a warm-up).
-        2. ICP of the current lidar scan against any older, nearby node.
-      Any successful loop closure triggers a full graph optimisation.
-
-External-library policy: numpy only — no scipy / sklearn / cv2 geometry.
-cv2.imshow / cv2.waitKey / cv2.putText stay in the caller.
-"""
-
 from __future__ import annotations
 
 import math
@@ -25,9 +7,6 @@ from typing import Literal, Optional
 import numpy as np
 
 from .icp import icp_match
-
-
-# ── SE(2) helpers ────────────────────────────────────────────────────────────
 
 def wrap_angle(a: float) -> float:
     return math.atan2(math.sin(a), math.cos(a))
@@ -226,9 +205,13 @@ class GraphSession:
         odom_weight: float = 1.0,
         loop_weight: float = 5.0,
         optimize_iterations: int = 10,
+        min_anchor_translation: float = 0.02,
+        allow_rotation_only_keyframes: bool = False,
     ) -> None:
         self.node_dist_thresh = node_dist_thresh
         self.node_angle_thresh = node_angle_thresh
+        self.min_anchor_translation = min_anchor_translation
+        self.allow_rotation_only_keyframes = allow_rotation_only_keyframes
         self.loop_radius = loop_radius
         self.loop_warmup_nodes = loop_warmup_nodes
         self.icp_radius = icp_radius
@@ -256,15 +239,35 @@ class GraphSession:
     # ---- helpers ----------------------------------------------------------
 
     def _should_add(self, odom: np.ndarray) -> bool:
+        """Translation-first keyframe gate.
+
+        A new keyframe is only inserted when the robot has translated past
+        ``node_dist_thresh``. Rotation alone never triggers a keyframe by
+        default — pure in-place rotation would otherwise stack near-duplicate
+        scans at slightly drifting (x, y) (IMU + shared-mode encoder noise)
+        and smear the rendered map. The angle threshold still fires as a
+        secondary trigger, but only once the robot has *also* moved at least
+        ``min_anchor_translation`` since the last keyframe (so curving paths
+        get rotation-spaced keyframes; standing-and-spinning does not).
+
+        Set ``allow_rotation_only_keyframes=True`` to recover the original
+        tawan-slam behaviour for debugging.
+        """
         if self._last_odom_pose is None:
             return True
         dx = odom[0] - self._last_odom_pose[0]
         dy = odom[1] - self._last_odom_pose[1]
-        dtheta = wrap_angle(odom[2] - self._last_odom_pose[2])
-        return (
-            math.hypot(dx, dy) >= self.node_dist_thresh
-            or abs(dtheta) >= self.node_angle_thresh
-        )
+        translation = math.hypot(dx, dy)
+        dtheta = abs(wrap_angle(odom[2] - self._last_odom_pose[2]))
+
+        if translation >= self.node_dist_thresh:
+            return True
+        if dtheta >= self.node_angle_thresh and (
+            self.allow_rotation_only_keyframes
+            or translation >= self.min_anchor_translation
+        ):
+            return True
+        return False
 
     def _cached_points(self, node_id: int) -> Optional[np.ndarray]:
         if node_id in self._scan_points_cache:

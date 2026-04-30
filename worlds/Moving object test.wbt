@@ -12,8 +12,8 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.4877304952195937 -0.5302062144821634 0.6935418762824233 4.4336361247341936
-  position -0.2789213825012014 2.4384264768187753 7.746291448187715
+  orientation -0.44059197780007286 -0.4521560309677162 0.775521523078336 4.48604198529705
+  position -0.5997920517633397 3.6048511325059445 6.6918485693188
 }
 TexturedBackground {
 }
@@ -21,7 +21,7 @@ TexturedBackgroundLight {
 }
 RectangleArena {
   floorSize 3 3
-  wallHeight 2
+  wallHeight 0.5
 }
 TurtleBot3Burger {
   translation 1.18 0 0
@@ -39,6 +39,7 @@ TurtleBot3Burger {
   ]
 }
 Pioneer3at {
+  translation 5.50587e-07 -0.54 0
   rotation 0 0 1 -1.5707953071795862
   controller "<extern>"
 }
@@ -48,7 +49,7 @@ PointLight {
   location 0 0 1.5
 }
 Wall {
-  translation 0.509999 0.62 0
+  translation 0.139999 0.62 0
   rotation 0 0 1 -1.5707953071795862
   size 0.05 2 0.4
   appearance Roughcast {
@@ -62,6 +63,18 @@ Wall {
   translation -0.755713 -0.677074 0
   rotation 0 0 1 0.785399
   name "wall(1)"
+  size 0.05 1.2 0.4
+  appearance Roughcast {
+    textureTransform TextureTransform {
+      scale 2.4 1
+    }
+    IBLStrength 0
+  }
+}
+Wall {
+  translation 0.0220986 -0.209261 0
+  rotation 0 0 1 -1.5707953071795862
+  name "wall(2)"
   size 0.05 1.2 0.4
   appearance Roughcast {
     textureTransform TextureTransform {
